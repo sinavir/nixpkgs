@@ -192,7 +192,7 @@ in
           ''}
 
           ${lib.optionalString (cfg.environmentFile != null) ''
-            cat ${lib.escapeShellArg cfg.environmentFile}) >> ${envFile}
+            cat ${lib.escapeShellArg cfg.environmentFile} >> ${envFile}
           ''}
 
           php spark castopod:database-update

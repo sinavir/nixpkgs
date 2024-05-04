@@ -8,6 +8,7 @@
 , prefetch-yarn-deps
 , fixup-yarn-lock
 , nodePackages
+, nixosTests
 }:
 
 stdenv.mkDerivation rec {
@@ -58,7 +59,12 @@ stdenv.mkDerivation rec {
       wrapt
     ];
 
-  passthru.pythonEnv = python3.withPackages (_: propagatedBuildInputs);
+  passthru = {
+    pythonEnv = python3.withPackages (_: propagatedBuildInputs);
+    tests = {
+      inherit (nixosTests) grist-core;
+    };
+  };
 
   postPatch = ''
     rm .yarnrc
@@ -104,6 +110,11 @@ stdenv.mkDerivation rec {
     cp -r bower_components $out
 
     runHook postInstall
+  '';
+
+  postFixup = ''
+    substituteInPlace $out/sandbox/run.sh \
+      --replace-fail './sandbox/gvisor/get_checkpoint_path.sh' "$out/sandbox/gvisor/get_checkpoint_path.sh"
   '';
 
   meta = {

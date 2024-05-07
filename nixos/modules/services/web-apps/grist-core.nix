@@ -19,7 +19,20 @@ in
   meta.maintainers = with lib.maintainers; [ soyouzpanda ];
 
   options.services.grist-core = {
-    package = mkPackageOption pkgs "grist-core" { };
+    package = mkPackageOption pkgs "grist-core" {
+      extraDescription = "Override it to tune the sandbox environment";
+      example = ''
+        pkgs.grist-core.override {
+          sandboxPath = [ pkgs.hello ];
+          pythonFun = (ps:
+            pkgs.grist-core.defaultPythonFun ps ++
+            with ps; [
+              numpy
+            ]
+          );
+        }
+      '';
+    };
     enable = mkEnableOption "Grist core";
 
     user = mkOption {
@@ -32,35 +45,6 @@ in
       type = types.str;
       default = "grist-core";
       description = "Group under which grist-core runs.";
-    };
-
-    pythonEnv = mkOption {
-      internal = true;
-      type = types.package;
-      default = pkgs.grist-core.pythonEnv;
-      example = literalExpression ''
-        pkgs.python3.withPackages (ps: with ps; [
-          astroid
-          asttokens
-          chardet
-          et-xmlfile
-          executing
-          friendly-traceback
-          iso8601
-          lazy-object-proxy
-          openpyxl
-          phonenumbers
-          pure-eval
-          python-dateutil
-          roman
-          six
-          sortedcontainers
-          stack-data
-          typing-extensions
-          unittest-xml-reporting
-          wrapt
-        ]);
-      '';
     };
 
     settings = mkOption {
@@ -91,10 +75,6 @@ in
       GRIST_INST_DIR = mkDefault "/var/lib/grist-core";
       GRIST_USER_ROOT = mkDefault "/var/lib/grist-core";
       TYPEORM_DATABASE = mkDefault "/var/lib/grist-core/db.sqlite";
-      # We only support gVisor as a method of sandboxing for now.
-      # If you are interested in a different method of sandboxing, feel free
-      # to contribute to it.
-      GRIST_SANDBOX_FLAVOR = "gvisor";
     };
 
     systemd.services.grist-core = {
@@ -104,38 +84,42 @@ in
       after = [ "postgresql.service" "network.target" ];
       path = [
         pkgs.gvisor
-        cfg.pythonEnv
       ];
 
       serviceConfig = {
         RuntimeDirectory = "grist-core";
+        WorkingDirectory = cfg.package;
         StateDirectory = "grist-core";
-        Restart = "always";
-        ExecStart = "${pkgs.nodejs}/bin/node ${pkgs.grist-core}/_build/stubs/app/server/server.js";
+        #Restart = "always";
+        ExecStart = "${pkgs.nodejs}/bin/node ${cfg.package}/_build/stubs/app/server/server.js";
         DynamicUser = true;
 
         Type = "exec";
-        ProtectHome = true;
-        ProtectSystem = "strict";
-        PrivateTmp = true;
-        PrivateDevices = true;
-        ProtectHostname = true;
-        ProtectClock = true;
-        ProtectKernelTunables = true;
-        ProtectKernelModules = true;
-        ProtectKernelLogs = true;
-        ProtectControlGroups = true;
-        NoNewPrivileges = true;
-        RestrictRealtime = true;
-        RestrictSUIDSGID = true;
-        RemoveIPC = true;
-        PrivateMounts = true;
+        #ProtectHome = true;
+        #ProtectSystem = "strict";
+        #PrivateTmp = true;
+        #PrivateDevices = true;
+        #ProtectHostname = true;
+        #ProtectClock = true;
+        #ProtectKernelTunables = true;
+        #ProtectKernelModules = true;
+        #ProtectKernelLogs = true;
+        #ProtectControlGroups = true;
+        #NoNewPrivileges = true;
+        #RestrictRealtime = true;
+        #RestrictSUIDSGID = true;
+        #RemoveIPC = true;
+        #PrivateMounts = true;
 
         EnvironmentFile = mkIf (cfg.environmentFile != null) cfg.environmentFile;
       };
 
       environment = cfg.settings // {
-        NODE_PATH = "${pkgs.grist-core}/_build:${pkgs.grist-core}/_build/stubs:${pkgs.grist-core}/_build/ext";
+        NODE_PATH = "${cfg.package}/_build:${cfg.package}/_build/stubs:${cfg.package}/_build/ext";
+        # We only support gVisor as a method of sandboxing for now.
+        # If you are interested in a different method of sandboxing, feel free
+        # to contribute to it.
+        GRIST_SANDBOX_FLAVOR = "gvisor";
         GVISOR_FLAGS = "--rootless";
         GVISOR_AVAILABLE = "1";
       };

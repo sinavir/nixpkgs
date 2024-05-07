@@ -1,0 +1,4 @@
+#!/usr/bin/env nix-shell
+#! nix-shell -p nixos-shell -i bash
+
+nixos-shell grist.nix -I nixpkgs=./.

@@ -1,7 +1,30 @@
+let
+  defaultPythonFun = ps: with ps; [
+    astroid
+    asttokens
+    chardet
+    et-xmlfile
+    executing
+    friendly-traceback
+    iso8601
+    lazy-object-proxy
+    openpyxl
+    phonenumbers
+    pure-eval
+    python-dateutil
+    roman
+    six
+    sortedcontainers
+    stack-data
+    typing-extensions
+    unittest-xml-reporting
+    wrapt
+  ];
+in
 { lib
 , stdenv
-, fetchFromGitHub
 , python3
+, fetchFromGitHub
 , fetchYarnDeps
 , yarn
 , nodejs
@@ -9,21 +32,26 @@
 , fixup-yarn-lock
 , nodePackages
 , nixosTests
+, sandboxPath ? []
+, pythonFun ? defaultPythonFun
+, pythonEnv ? python3.withPackages pythonFun
 }:
 
-stdenv.mkDerivation rec {
+stdenv.mkDerivation (finalAttrs: {
   pname = "grist-core";
   version = "1.1.13";
 
   src = fetchFromGitHub {
     owner = "gristlabs";
     repo = "grist-core";
-    rev = "v${version}";
+    rev = "v${finalAttrs.version}";
     hash = "sha256-lLXgTVhztFGnfrMxks05T8dfE6CH4p/0j8lPieBRGTY=";
   };
 
+  patches = [ ./run_py.patch ];
+
   offlineCache = fetchYarnDeps {
-    yarnLock = "${src}/yarn.lock";
+    yarnLock = "${finalAttrs.src}/yarn.lock";
     hash = "sha256-cbkykydPfIrlCxaLfdIFseBuNVUtIqPpLR2J3LTFQl4=";
   };
 
@@ -36,31 +64,12 @@ stdenv.mkDerivation rec {
     node-pre-gyp
   ];
 
-  propagatedBuildInputs = with python3.pkgs;
-    [
-      astroid
-      asttokens
-      chardet
-      et-xmlfile
-      executing
-      friendly-traceback
-      iso8601
-      lazy-object-proxy
-      openpyxl
-      phonenumbers
-      pure-eval
-      python-dateutil
-      roman
-      six
-      sortedcontainers
-      stack-data
-      typing-extensions
-      unittest-xml-reporting
-      wrapt
-    ];
+  buildInputs = [
+    python3
+  ];
 
   passthru = {
-    pythonEnv = python3.withPackages (_: propagatedBuildInputs);
+    inherit defaultPythonFun;
     tests = {
       inherit (nixosTests) grist-core;
     };
@@ -74,7 +83,7 @@ stdenv.mkDerivation rec {
     runHook preConfigure
 
     export HOME=$(mktemp -d)
-    yarn config --offline set yarn-offline-mirror ${offlineCache}
+    yarn config --offline set yarn-offline-mirror ${finalAttrs.offlineCache}
     fixup-yarn-lock yarn.lock
 
     mkdir -p "$HOME/.node-gyp/${nodejs.version}"
@@ -112,9 +121,12 @@ stdenv.mkDerivation rec {
     runHook postInstall
   '';
 
+  sandboxPath = lib.makeSearchPath "bin" (lib.singleton pythonEnv ++ sandboxPath);
+  sandboxLibPath = lib.makeLibraryPath (lib.singleton pythonEnv ++ sandboxPath);
+  pythonExe = lib.getExe pythonEnv;
+
   postFixup = ''
-    substituteInPlace $out/sandbox/run.sh \
-      --replace-fail './sandbox/gvisor/get_checkpoint_path.sh' "$out/sandbox/gvisor/get_checkpoint_path.sh"
+    substituteAllInPlace $out/sandbox/gvisor/run.py
   '';
 
   meta = {
@@ -125,4 +137,4 @@ stdenv.mkDerivation rec {
     mainProgram = "grist-core";
     platforms = lib.platforms.all;
   };
-}
+})

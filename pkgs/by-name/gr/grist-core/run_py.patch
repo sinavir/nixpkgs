@@ -1,0 +1,76 @@
+diff --git a/sandbox/gvisor/run.py b/sandbox/gvisor/run.py
+index 61a6b916..b998f6e3 100755
+--- a/sandbox/gvisor/run.py
++++ b/sandbox/gvisor/run.py
+@@ -74,8 +74,8 @@ mounts = [             # These will be filled in more fully programmatically bel
+ ]
+ preserved = set()
+ env = [
+-  "PATH=/usr/local/bin:/usr/bin:/bin",
+-  "LD_LIBRARY_PATH=/usr/local/lib"      # Assumes python version in /usr/local
++    "PATH=@sandboxPath@",
++    "LD_LIBRARY_PATH=@sandboxLibPath@",
+ ] + (args.env or [])
+ settings = {
+   "ociVersion": "1.0.0",
+@@ -138,10 +137,16 @@ def preserve(*locations, short_failure=False):
+     # muddle.  For Grist, this could happen if a parent directory of a temporary import
+     # directory hasn't been made available to the container this code runs in, for example.
+     if not os.path.exists(location):
+-      if short_failure:
+-        raise Exception('cannot find: ' + location)
+-      raise Exception('cannot find: ' + location + ' ' +
+-                      '(if tmp path, make sure TMPDIR when running grist and GRIST_TMP line up)')
++      # return instead of fail since nix is not using FHS
++      return
++      # if short_failure:
++      #    raise Exception("cannot find: " + location)
++      # raise Exception(
++      #    "cannot find: "
++      #    + location
++      #    + " "
++      #    + "(if tmp path, make sure TMPDIR when running grist and GRIST_TMP line up)"
++      # )
+     mounts.append({
+       "destination": location,
+       "source": location,
+@@ -151,7 +156,7 @@ def preserve(*locations, short_failure=False):
+     preserved.add(location)
+ 
+ # Prepare the file system - blank out everything that need not be shared.
+-exceptions = ["lib", "lib64"]   # to be shared (read-only)
++exceptions = ["nix", "lib", "lib64"]  # to be shared (read-only)
+ exceptions += ["proc", "sys"]   # already virtualized
+ 
+ # retain /bin and /usr/bin for utilities
+@@ -172,13 +177,14 @@ best = None
+ if not include_python2:
+   # We expect python3 in /usr/bin or /usr/local/bin.
+   candidates = [
+-    path
+-    # Pick the most generic python if not matching python3.11.
+-    # Sorry this is delicate because of restores, mounts, symlinks.
+-    for pattern in ['python3.11', 'python3.10', 'python3.9', 'python3', 'python3*']
+-    for root in ['/usr/local', '/usr']
+-    for path in glob.glob(f'{root}/bin/{pattern}')
+-    if os.path.exists(path)
++    "@pythonExe@"
++    #path
++    ## Pick the most generic python if not matching python3.11.
++    ## Sorry this is delicate because of restores, mounts, symlinks.
++    #for pattern in ['python3.11', 'python3.10', 'python3.9', 'python3', 'python3*']
++    #for root in ['/usr/local', '/usr']
++    #for path in glob.glob(f'{root}/bin/{pattern}')
++    #if os.path.exists(path)
+   ]
+   if not candidates:
+     raise Exception('could not find python3')
+@@ -233,6 +239,8 @@ def make_command(root_dir, action):
+   flag_string = os.environ.get('GVISOR_FLAGS') or '-rootless'
+   flags = flag_string.split(' ')
+   command = ["runsc",
++            "-debug",
++            "-debug-log=/tmp/runsclog/",
+              "-root", "/tmp/runsc",   # Place container information somewhere writable.
+             ] + flags + [
+              "-network",
